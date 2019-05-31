@@ -1,5 +1,5 @@
 {
-    "name": "typescript",
+    "name": "typescript-with-pnp",
     "author": "Microsoft Corp.",
     "homepage": "https://www.typescriptlang.org/",
     "version": "3.6.0",
@@ -22,8 +22,8 @@
     "main": "./lib/typescript.js",
     "typings": "./lib/typescript.d.ts",
     "bin": {
-        "tsc": "./bin/tsc",
-        "tsserver": "./bin/tsserver"
+        "tsc-with-pnp": "./bin/tsc",
+        "tsserver-with-pnp": "./bin/tsserver"
     },
     "engines": {
         "node": ">=4.2.0"
@@ -106,5 +106,7 @@
         "os": false,
         "path": false
     },
-    "dependencies": {}
+    "dependencies": {
+        "ts-pnp": "^1.1.2"
+    }
 }

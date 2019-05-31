@@ -1,3 +1,16 @@
+// import { resolveModuleName } from 'ts-pnp';
+
+
+
+try {
+  const t = require(`pnpapi`);
+  console.log("Program IN PNP PROJECT OK");
+  console.log(t);
+} catch (error) {
+    console.log("Program NOT IN PNP PROJECT KO");
+  // not in PnP; not a problem
+}
+
 namespace ts {
     const ignoreDiagnosticCommentRegEx = /(^\s*$)|(^\s*\/\/\/?\s*(@ts-ignore)?)/;
 
@@ -73,6 +86,122 @@ namespace ts {
     /*@internal*/
     // TODO(shkamat): update this after reworking ts build API
     export function createCompilerHostWorker(options: CompilerOptions, setParentNodes?: boolean, system = sys): CompilerHost {
+
+
+
+
+
+
+        let pnp:any;
+
+        try {
+          pnp = require(`pnpapi`);
+          console.log("IN PNP PROJECT OK");
+        } catch (error) {
+          // not in PnP; not a problem
+        }
+        
+        function doResolveModuleName(request:string, issuer:string, compilerOptions:CompilerOptions, moduleResolutionHost:CompilerHost, parentResolver:any) {
+          const topLevelLocation = pnp.getPackageInformation(pnp.topLevel).packageLocation;
+        // @ts-ignore
+          const [, prefix = ``, packageName = ``, rest] = request.match(/^(!(?:.*!)+)?((?!\.{0,2}\/)(?:@[^\/]+\/)?[^\/]+)?(.*)/);
+        
+          let failedLookupLocations:string[] = [];
+        
+          // First we try the resolution on "@types/package-name" starting from the project root
+          if (packageName) {
+            const typesPackagePath = `@types/${packageName.replace(/\//g, `__`)}${rest}`;
+        
+            let unqualified;
+            try {
+              unqualified = pnp.resolveToUnqualified(typesPackagePath, `${topLevelLocation}/`, {considerBuiltins: false});
+            } catch (error) {}
+        
+            if (unqualified) {
+              // TypeScript checks whether the directory of the candidate is a directory
+              // which may cause issues w/ zip loading (since the zip archive is still
+              // reported as a file). To workaround this we add a trailing slash, which
+              // causes TypeScript to assume the parent is a directory.
+              if (moduleResolutionHost.directoryExists && moduleResolutionHost.directoryExists(unqualified))
+                unqualified += `/`;
+        
+              const finalResolution = parentResolver(unqualified, issuer, compilerOptions, moduleResolutionHost);
+        
+              if (finalResolution.resolvedModule || finalResolution.resolvedTypeReferenceDirective) {
+                return finalResolution;
+              } else {
+                failedLookupLocations = failedLookupLocations.concat(finalResolution.failedLookupLocations);
+              }
+            }
+          }
+        
+          // Then we try on "package-name", this time starting from the package that makes the request
+          if (true) {
+            const regularPackagePath = `${packageName || ``}${rest}`;
+        
+            let unqualified;
+            try {
+              unqualified = pnp.resolveToUnqualified(regularPackagePath, issuer, {considerBuiltins: false});
+            } catch (error) {}
+        
+            if (unqualified) {
+              // TypeScript checks whether the directory of the candidate is a directory
+              // which may cause issues w/ zip loading (since the zip archive is still
+              // reported as a file). To workaround this we add a trailing slash, which
+              // causes TypeScript to assume the parent is a directory.
+              if (moduleResolutionHost.directoryExists && moduleResolutionHost.directoryExists(unqualified))
+                unqualified += `/`;
+        
+              const finalResolution = parentResolver(unqualified, issuer, compilerOptions, moduleResolutionHost);
+        
+              if (finalResolution.resolvedModule || finalResolution.resolvedTypeReferenceDirective) {
+                return finalResolution;
+              } else {
+                failedLookupLocations = failedLookupLocations.concat(finalResolution.failedLookupLocations);
+              }
+            }
+          }
+        
+          return {
+            resolvedModule: undefined,
+            resolvedTypeReferenceDirective: undefined,
+            failedLookupLocations,
+          };
+        }
+        
+        const resolveModuleNamePatched = pnp
+          ? doResolveModuleName
+          : (moduleName:string, containingFile:string, compilerOptions:CompilerOptions, compilerHost:CompilerHost, resolveModuleName:any) =>
+              resolveModuleName(moduleName, containingFile, compilerOptions, compilerHost);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         const existingDirectories = createMap<boolean>();
         const getCanonicalFileName = createGetCanonicalFileName(system.useCaseSensitiveFileNames);
         function getSourceFile(fileName: string, languageVersion: ScriptTarget, onError?: (message: string) => void): SourceFile | undefined {
@@ -176,6 +305,19 @@ namespace ts {
 
         const newLine = getNewLineCharacter(options, () => system.newLine);
         const realpath = system.realpath && ((path: string) => system.realpath!(path));
+
+        function resolveModuleNames(moduleNames: string[], containingFile: string) {
+            return moduleNames.map(moduleName => {
+              return resolveModuleNamePatched(moduleName, containingFile, options, compilerHost, resolveModuleName).resolvedModule;
+            });
+          }
+         
+        function resolveTypeReferenceDirectives(typeDirectiveNames: string[], containingFile: string) {
+            return typeDirectiveNames.map(typeDirectiveName => {
+                return resolveModuleNamePatched(typeDirectiveName, containingFile, options, compilerHost, resolveTypeReferenceDirective).resolvedTypeReferenceDirective;
+            });
+        }
+
         const compilerHost: CompilerHost = {
             getSourceFile,
             getDefaultLibLocation,
@@ -194,7 +336,9 @@ namespace ts {
             realpath,
             readDirectory: (path, extensions, include, exclude, depth) => system.readDirectory(path, extensions, include, exclude, depth),
             createDirectory: d => system.createDirectory(d),
-            createHash: maybeBind(system, system.createHash)
+            createHash: maybeBind(system, system.createHash),
+            resolveModuleNames,
+            resolveTypeReferenceDirectives
         };
         return compilerHost;
     }
